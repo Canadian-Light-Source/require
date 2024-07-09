@@ -262,6 +262,7 @@ int requireDebug;
     #define END_DIR_LOOP while(FindNextFile(dir,&direntry)); FindClose(dir);
     #define SKIP_NON_DIR(e) if (!(e.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || (e.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)) continue;
     #define FILENAME(e) e.cFileName
+    #pragma comment(lib, "kernel32.lib")
 
 #else
     #include <dirent.h>
