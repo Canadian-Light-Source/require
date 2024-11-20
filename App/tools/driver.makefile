@@ -102,6 +102,9 @@ DEPFILE = ${PRJ}.dep
 BASH_ENV=
 ENV=
 
+# Workaround for perl warnings about unknown locales
+export LC_ALL=C
+
 ifeq (${EPICS_HOST_ARCH},)
 $(error EPICS_HOST_ARCH is not set)
 endif
@@ -363,6 +366,7 @@ ${CONFIG}/CONFIG:
 EB:=${EPICS_BASE}
 TOP:=${EPICS_BASE}
 DELAY_INSTALL_LIBS = YES
+override CONVERTRELEASE=true
 -include ${CONFIG}/CONFIG
 SHELL = /bin/bash -O extglob
 BASE_CPPFLAGS=
@@ -889,10 +893,8 @@ INSTALL_LIBS=
 INSTALL_MUNCHS=
 include ${BASERULES}
 
-# In 7.0+ include submodules config files
-ifdef BASE_7_0
-include ${EPICS_BASE}/cfg/CONFIG_*_MODULE
-endif
+# Include submodules config files if available
+-include ${EPICS_BASE}/cfg/CONFIG_*_MODULE
 
 ifeq (${OS_CLASS},WIN32) # explicitly link required dependencies
 LIB_LIBS += ${EPICS_BASE_IOC_LIBS} ${REQ}
