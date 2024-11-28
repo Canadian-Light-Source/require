@@ -518,7 +518,12 @@ what::
 	@echo ${EPICSVERSION} ${T_A}
 
 ifdef SYSROOT
-export PKG_CONFIG_LIBDIR=$(wildcard $(SYSROOT:%=%/lib*/pkgconfig))
+PKG_CONFIG_DIRS+=/lib*
+PKG_CONFIG_DIRS+=/usr/lib*
+PKG_CONFIG_DIRS+=/usr/lib/*
+PKG_CONFIG_DIRS+=/usr/share
+PKG_CONFIG_DIRS+=/opt/extra/lib/*
+export PKG_CONFIG_LIBDIR=$(subst $() $(),:,$(wildcard $(patsubst %, $(SYSROOT)%/pkgconfig, $(PKG_CONFIG_DIRS))))
 export PKG_CONFIG_SYSROOT_DIR = $(SYSROOT)
 endif
 
