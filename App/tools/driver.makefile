@@ -918,11 +918,18 @@ RELEASE_INCLUDES += -I${EPICS_BASE}/include/os/${OS_CLASS}
 EPICS_INCLUDES += -I$(EPICS_BASE_INCLUDE) -I$(EPICS_BASE_INCLUDE)/os/$(OS_CLASS)
 
 # Find all sources and set vpath accordingly.
-$(foreach file, $(filter-out /%,${SRCS} ${TEMPLS} ${SCR} ${SHRLIBS}), $(eval vpath $(notdir ${file}) ../$(dir ${file})))
-$(foreach file, $(filter /%,${SRCS} ${TEMPLS} ${SCR} ${SHRLIBS}), $(eval vpath $(notdir ${file}) $(dir ${file})))
+define SONAME
+	$(if $(strip $1),$(shell readelf -d $1 | awk '/\(SONAME\)/{print gensub(/.*\[(.*)\]/,"\\1","G")}'))
+endef
+
+$(foreach file, $(filter-out ~/% /%,${SRCS} ${TEMPLS} ${SCR} ${SHRLIBS}), $(eval vpath $(notdir ${file}) ../$(dir ${file})))
+$(foreach file, $(filter-out ~/% /%,${SHRLIBS}), $(eval vpath $(call SONAME,${file}) ../$(dir ${file})))
+$(foreach file, $(filter ~/% /%,${SRCS} ${TEMPLS} ${SCR}), $(eval vpath $(notdir ${file}) $(patsubst ~/%,$(HOME)/%,$(dir ${file}))))
+$(foreach file, $(filter ~/% /%,${SHRLIBS}), $(eval vpath $(call SONAME,${file}) $(patsubst ~/%,$(HOME)/%,$(dir ${file}))))
 
 ifdef SHRLIBS
-LDFLAGS_Linux+=-Wl,-rpath,$(INSTALL_LIB)
+LDFLAGS_Linux+=-Wl,-rpath,$(INSTALL_LIB) $(addprefix -L ,$(dir ${SHRLIBS}))
+USR_LIBS+=$(patsubst lib%,%,$(basename $(basename $(basename $(basename $(notdir ${SHRLIBS}))))))
 endif
 
 # Do not treat %.dbd the same way because it creates a circular dependency
@@ -954,7 +961,7 @@ ${MODULEDBD}: ${DBDFILES}
 	${MAKEHOME}expandDBD.pl -$(basename ${EPICSVERSION}) ${DBDEXPANDPATH} $^ > $@
 
 # Install everything.
-INSTALL_LIBS = $(addprefix ${INSTALL_LIB}/,${MODULELIB} $(notdir ${SHRLIBS}))
+INSTALL_LIBS = $(addprefix ${INSTALL_LIB}/,${MODULELIB} $(call SONAME,${SHRLIBS}))
 ifeq (${OS_CLASS},WIN32) # .lib for WIN32 is also required for linking
     ifneq (${MODULELIB},)
 	INSTALL_LIBS += $(addprefix ${INSTALL_LIB}/,${LIB_PREFIX}${PRJ}${LIB_SUFFIX})
