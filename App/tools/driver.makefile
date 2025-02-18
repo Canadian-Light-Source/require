@@ -227,6 +227,7 @@ help:
 	@echo "  SOURCES          (*.c *.cc *.cpp *.st *.stt *.gt)"
 	@echo "  DBDS             (*.dbd)"
 	@echo "  HEADERS          () [only those to install]"
+	@echo "  GEN_HEADERS      () extra (to menus and records) generated headers"
 	@echo "  TEMPLATES        (*.template *.db *.subs) [db files]"
 	@echo "  SCRIPTS          (*.cmd *.iocsh) [startup and other scripts]"
 	@echo "  BINS             () [programs to install]"
@@ -403,17 +404,18 @@ export DBD_SRCS
 
 #record dbd files given in DBDS
 RECORDS = $(filter %Record, $(basename $(notdir $(SRCS))))
-export RECORDS
 
 MENUS = $(basename $(filter menu%.dbd, $(notdir $(DBDS))))
 MENUS += $(basename $(basename $(filter menu%.dbd.pod, $(notdir $(DBDS)))))
 MENUS += $(basename $(notdir $(wildcard $(foreach m,$(if $(filter-out -none-,${DBDS}), $(shell awk '/^\s*include.*\<menu.*\.dbd\>/ {print gensub(/.*(menu.*\.dbd).*/,"\\1","g")}' $(filter-out -none-,${DBDS}))),$(addsuffix $m,$(sort $(dir $(DBDS))))))))
-export MENUS
+
+GEN_HDRS = ${GEN_HEADERS} ${MENUS} ${RECORDS}
+export GEN_HDRS
 
 BPTS = $(patsubst %.data,%.dbd,$(wildcard bpt*.data))
 export BPTS
 
-HDRS = ${RECORDS:%=${COMMON_DIR}/%.h} ${MENUS:%=${COMMON_DIR}/%.h}
+HDRS = ${GEN_HDRS:%=${COMMON_DIR}/%.h}
 HDRSX = ${HEADERS}
 HDRSX += ${HEADERS_${EPICS_BASETYPE}}
 HDRSX += ${HEADERS_${EPICSVERSION}}
@@ -865,8 +867,7 @@ debug::
 	@echo "SHRLIBNAME = ${SHRLIBNAME}"
 	@echo "LOADABLE_SHRLIBNAME = ${LOADABLE_SHRLIBNAME}"
 	@echo "LIBTARGETS = ${LIBTARGETS}"
-	@echo "RECORDS = ${RECORDS}"
-	@echo "MENUS = ${MENUS}"
+	@echo "GEN_HDRS = ${GEN_HDRS}"
 	@echo "BPTS = ${BPTS}"
 	@echo "HDRS = ${HDRS}"
 	@$(foreach s,$(filter SOURCES%,${.VARIABLES}),echo "$s = $($s)";)
@@ -879,15 +880,14 @@ debug::
 	@echo "MODULE_LOCATION = ${MODULE_LOCATION}"
 
 # In 3.14.8- this is required to build %Record.h and menu%.h files
-${BUILDRULE} ${RECORDS:%=${COMMON_DIR}/%.h}
-${BUILDRULE} ${MENUS:%=${COMMON_DIR}/%.h}
+${BUILDRULE} ${GEN_HDRS:%=${COMMON_DIR}/%.h}
 ${BUILDRULE} MODULEINFOS
 ${BUILDRULE} ${MODULEDBD}
 ${BUILDRULE} ${DEPFILE}
 ${BUILDRULE} AUTO_MODULES
 
 # In 3.15+ this is required to build %Record.h and menu%.h files
-COMMON_INC = ${RECORDS:%=${COMMON_DIR}/%.h} ${MENUS:%=${COMMON_DIR}/%.h}
+COMMON_INC = ${GEN_HDRS:%=${COMMON_DIR}/%.h}
 
 # Include default EPICS Makefiles (version dependent).
 # Avoid library installation when doing 'make build'.
