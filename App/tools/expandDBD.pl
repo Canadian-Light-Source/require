@@ -12,6 +12,7 @@ my $quiet = 0;
 my @searchpath = ();
 my %filesDone = ();
 my @filesInput = ();
+my $nested = 0;
 
 while (@ARGV) {
     my $arg = shift @ARGV;
@@ -65,21 +66,19 @@ sub scanfile {
     my $includer = shift; # dbd file and lineno where this dbd file is included.
     my $lineno = shift;   # they are undef for files from command line.
 
-    my $base = basename($name);
-
-    if (exists($filesDone{$base})) {
-        if (!$quiet) {
-            if ($includer) {
-                say STDERR "Info: skipping duplicate file $name included from $includer line $lineno";
+    if (!$nested) {
+        my $base = basename($name);
+        if (exists($filesDone{$base})) {
+            if (!$quiet) {
+                if ($includer) {
+                    say STDERR "Info: skipping duplicate file $name included from $includer line $lineno";
+                }
+                else {
+                    say STDERR "Info: skipping duplicate file $name from command line";
+                }
             }
-            else {
-                say STDERR "Info: skipping duplicate file $name from command line";
-            }
+            return 1;
         }
-        return 1;
-    }
-
-    if ($base ne "dbCommon.dbd") {
         $filesDone{$base} = 1;
     }
 
@@ -111,6 +110,8 @@ sub scanfile {
         }
         else {
             say;
+            if (/\{/) { $nested++; }
+            if (/\}/) { $nested--; }
         }
     }
 
