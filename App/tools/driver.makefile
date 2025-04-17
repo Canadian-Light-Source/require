@@ -66,7 +66,7 @@ MAKEHOME:=$(dir $(lastword ${MAKEFILE_LIST}))
 USERMAKEFILE:=$(lastword $(filter-out $(lastword ${MAKEFILE_LIST}), ${MAKEFILE_LIST}))
 
 # Some configuration:
-DEFAULT_EPICS_VERSIONS ?= 7.0.7 7.0.8
+DEFAULT_EPICS_VERSIONS ?= 7.0.7 7.0.8 7.0.9
 BUILDCLASSES = vxWorks Linux WIN32
 EPICS_MODULES ?= /ioc/modules
 MODULE_LOCATION = $(or ${INSTALL_PATH},${EPICS_MODULES})/$(or ${PRJ},$(error PRJ not defined))/$(or ${LIBVERSION},$(error LIBVERSION not defined))
