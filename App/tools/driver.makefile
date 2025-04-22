@@ -919,7 +919,7 @@ EPICS_INCLUDES += -I$(EPICS_BASE_INCLUDE) -I$(EPICS_BASE_INCLUDE)/os/$(OS_CLASS)
 
 # Find all sources and set vpath accordingly.
 define SONAME
-	$(if $(strip $1),$(shell readelf -d $1 | awk '/\(SONAME\)/{print gensub(/.*\[(.*)\]/,"\\1","G")}'))
+	$(if $(strip $1),$(or $(shell readelf -d $1 2>/dev/null | awk '/\(SONAME\)/{print gensub(/.*\[(.*)\]/,"\\1","G")}')), $1)
 endef
 
 $(foreach file, $(filter-out ~/% /%,${SRCS} ${TEMPLS} ${SCR} ${SHRLIBS}), $(eval vpath $(notdir ${file}) ../$(dir ${file})))
@@ -929,7 +929,7 @@ $(foreach file, $(filter ~/% /%,${SHRLIBS}), $(eval vpath $(call SONAME,${file})
 
 ifdef SHRLIBS
 LDFLAGS_Linux+=-Wl,-rpath,$(INSTALL_LIB) $(addprefix -L ,$(dir ${SHRLIBS}))
-USR_LIBS+=$(patsubst lib%,%,$(basename $(basename $(basename $(basename $(notdir ${SHRLIBS}))))))
+USR_LIBS+=$(foreach l,$(notdir ${SHRLIBS}),$(if $(filter $(patsubst .%,%,$(SHRLIB_SUFFIX)),$(word 2,$(subst ., ,$l))),$(patsubst lib%,%,$(firstword $(subst ., ,$l)))))
 endif
 
 # Do not treat %.dbd the same way because it creates a circular dependency
