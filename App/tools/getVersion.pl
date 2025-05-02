@@ -141,7 +141,7 @@ sub parse_git_output {
             $version = "$major.$minor.$patch";
             say STDERR "Checking tag $line => version $version";
         }
-        elsif ($line =~ /^[a-zA-Z0-9_]*[a-zA-Z]_([0-9]+)_([0-9]+)(_([0-9]+))?$/) {
+        elsif ($line =~ /^[a-zA-Z0-9_]*[a-zA-Z][0-9]*_([0-9]+)_([0-9]+)(_([0-9]+))?$/) {
             $tag = $line;
             my $major = $1;
             my $minor = $2;
