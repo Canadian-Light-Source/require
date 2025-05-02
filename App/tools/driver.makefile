@@ -948,6 +948,8 @@ $(foreach ext, $(sort $(suffix ${HDRS})), $(eval vpath %${ext} $(foreach path, o
 
 PRODUCTS = ${MODULELIB} ${MODULEDBD} ${DEPFILE}
 MODULEINFOS:
+#	Rewrite version file and thus rebuild library if version changed:
+	@grep -xqs ${LIBVERSION} LIBVERSION || $(RM) $(wildcard *_version_*.*)
 	@echo ${PRJ} > MODULENAME
 	@echo $(shell findmnt -t noautofs -n -o SOURCE --target ${EPICS_MODULES}) > INSTBASE
 	@echo ${PRODUCTS} > PRODUCTS
@@ -1209,9 +1211,9 @@ endif
 # Create dependency file for recursive requires.
 ${DEPFILE}: ${LIBOBJS} $(USERMAKEFILE)
 	@echo "Collecting dependencies"
-	$(RM) $@
+	@$(RM) $@
 	@echo "# Generated file. Do not edit." > $@
-#	Check dependencies on ${REQ} and other module headers.
+#	Check dependencies on ${REQ} and other module headers:
 	$(foreach m,$(sort ${REQ} $(shell cat *.d 2>/dev/null | sed 's/ /\n/g' | sed -n 's%${EPICS_MODULES}/*\([^/]*\)/.*%\1%p' | sort -u)),echo "$m $(or $(if $(strip $(wildcard ${EPICS_MODULES}/$m/use_exact_version)$(shell echo ${$m_VERSION}|sed 'y/0123456789./           /')),$(strip ${$m_VERSION}),$(addsuffix .,$(word 1,$(subst ., ,${$m_VERSION})))$(word 2,$(subst ., ,${$m_VERSION}))),$(and $(wildcard ${EPICS_MODULES}/$m),$(error No numeric version found for REQUIRED module "$m". For using a test version try setting $m_VERSION in your $(notdir $(USERMAKEFILE)))),$(error REQUIRED module "$m" not found for ${T_A}))" >> $@;)
 ifeq (${EPICS_BASETYPE},3.13)
 ifneq ($(strip $(filter %.st %.stt,$(SRCS))),)
@@ -1221,7 +1223,7 @@ endif
 
 # Remove MakefileInclude after we are done because it interfers with our way to build.
 $(BUILDRULE)
-	$(RM) MakefileInclude
+	@$(RM) MakefileInclude
 
 endif # In O.* directory
 endif # T_A defined
