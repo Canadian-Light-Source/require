@@ -917,20 +917,16 @@ RELEASE_INCLUDES += -I${EPICS_BASE}/include/os/${OS_CLASS}
 # For EPICS 3.13:
 EPICS_INCLUDES += -I$(EPICS_BASE_INCLUDE) -I$(EPICS_BASE_INCLUDE)/os/$(OS_CLASS)
 
-# Find all sources and set vpath accordingly.
+# Get the shared library name that the dynamic linker will look for
 define SONAME
 	$(if $(strip $1),$(or $(shell readelf -d $1 2>/dev/null | awk '/\(SONAME\)/{print gensub(/.*\[(.*)\]/,"\\1","G")}')), $1)
 endef
 
+# Find all sources and set vpath accordingly.
 $(foreach file, $(filter-out ~/% /%,${SRCS} ${TEMPLS} ${SCR} ${SHRLIBS}), $(eval vpath $(notdir ${file}) ../$(dir ${file})))
 $(foreach file, $(filter-out ~/% /%,${SHRLIBS}), $(eval vpath $(call SONAME,${file}) ../$(dir ${file})))
 $(foreach file, $(filter ~/% /%,${SRCS} ${TEMPLS} ${SCR}), $(eval vpath $(notdir ${file}) $(patsubst ~/%,$(HOME)/%,$(dir ${file}))))
 $(foreach file, $(filter ~/% /%,${SHRLIBS}), $(eval vpath $(call SONAME,${file}) $(patsubst ~/%,$(HOME)/%,$(dir ${file}))))
-
-ifdef SHRLIBS
-LDFLAGS_Linux+=-Wl,-rpath,$(INSTALL_LIB) $(addprefix -L ,$(dir ${SHRLIBS}))
-USR_LIBS+=$(foreach l,$(notdir ${SHRLIBS}),$(if $(filter $(patsubst .%,%,$(SHRLIB_SUFFIX)),$(word 2,$(subst ., ,$l))),$(patsubst lib%,%,$(firstword $(subst ., ,$l)))))
-endif
 
 # Do not treat %.dbd the same way because it creates a circular dependency
 # if a source dbd has the same name as the project dbd. Have to clear %.dbd and not use ../ path.
@@ -945,6 +941,13 @@ vpath menu%.dbd.pod ${DBD_PATH}
 # Order is important! First OS dependent, then os default, then others
 # Allow any header extention the user comes up with (.h, .H, .hpp, .hxx, ...)
 $(foreach ext, $(sort $(suffix ${HDRS})), $(eval vpath %${ext} $(foreach path, os/${OS_CLASS} ${POSIX_{POSIX}} os/default, $(sort $(filter %/${path}/,$(dir ${HDRS})))) $(sort $(dir ${HDRS} $(filter-out /%,${SRCS})))))
+
+# Make sure all SHRLIBS are linked, even if the linker finds no dependency
+LDFLAGS_Linux += -Wl,--no-as-needed -Wl,-rpath,$(INSTALL_LIB)
+ifneq ($(words $(SHRLIBS)),0)
+LDFLAGS_Linux += $(addprefix -L ,$(dir ${SHRLIBS}))
+USR_LIBS += $(foreach l,$(notdir ${SHRLIBS}),$(if $(filter $(patsubst .%,%,$(SHRLIB_SUFFIX_BASE)),$(word 2,$(subst ., ,$l))),$(patsubst $(SHRLIB_PREFIX)%,%,$(firstword $(subst ., ,$l)))))
+endif
 
 PRODUCTS = ${MODULELIB} ${MODULEDBD} ${DEPFILE}
 MODULEINFOS:
