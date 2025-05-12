@@ -547,8 +547,8 @@ export USR_LIBOBJS
 BINS += $(foreach x, ${VAR_EXTENSIONS}, ${BINS_$x})
 export BINS
 
-SHRLIBS += $(foreach x, ${VAR_EXTENSIONS}, ${SHRLIBS_$x})
-export SHRLIBS
+SHRLIBS_ = ${SHRLIBS} $(foreach x, ${VAR_EXTENSIONS}, ${SHRLIBS_$x})
+export SHRLIBS_
 
 export CFG
 
@@ -876,6 +876,7 @@ debug::
 	@$(foreach s,$(filter DBDS%,${.VARIABLES}),echo "$s = $($s)";)
 	@echo "DBD_SRCS = ${DBD_SRCS}"
 	@echo "DBDFILES = ${DBDFILES}"
+	@$(foreach s,$(filter SHRLIBS%,${.VARIABLES}),echo "$s = $($s)";)
 	@echo "TEMPLS = ${TEMPLS}"
 	@echo "MODULE_LOCATION = ${MODULE_LOCATION}"
 
@@ -918,15 +919,21 @@ RELEASE_INCLUDES += -I${EPICS_BASE}/include/os/${OS_CLASS}
 EPICS_INCLUDES += -I$(EPICS_BASE_INCLUDE) -I$(EPICS_BASE_INCLUDE)/os/$(OS_CLASS)
 
 # Get the shared library name that the dynamic linker will look for
+ifeq ($(OS_CLASS),Linux)
 define SONAME
 	$(if $(strip $1),$(or $(shell readelf -d $1 2>/dev/null | awk '/\(SONAME\)/{print gensub(/.*\[(.*)\]/,"\\1","G")}')), $1)
 endef
+else
+define SONAME
+	$1
+endef
+endif
 
 # Find all sources and set vpath accordingly.
-$(foreach file, $(filter-out ~/% /%,${SRCS} ${TEMPLS} ${SCR} ${SHRLIBS}), $(eval vpath $(notdir ${file}) ../$(dir ${file})))
-$(foreach file, $(filter-out ~/% /%,${SHRLIBS}), $(eval vpath $(call SONAME,${file}) ../$(dir ${file})))
+$(foreach file, $(filter-out ~/% /%,${SRCS} ${TEMPLS} ${SCR} ${SHRLIBS_}), $(eval vpath $(notdir ${file}) ../$(dir ${file})))
+$(foreach file, $(filter-out ~/% /%,${SHRLIBS_}), $(eval vpath $(call SONAME,${file}) ../$(dir ${file})))
 $(foreach file, $(filter ~/% /%,${SRCS} ${TEMPLS} ${SCR}), $(eval vpath $(notdir ${file}) $(patsubst ~/%,$(HOME)/%,$(dir ${file}))))
-$(foreach file, $(filter ~/% /%,${SHRLIBS}), $(eval vpath $(call SONAME,${file}) $(patsubst ~/%,$(HOME)/%,$(dir ${file}))))
+$(foreach file, $(filter ~/% /%,${SHRLIBS_}), $(eval vpath $(call SONAME,${file}) $(patsubst ~/%,$(HOME)/%,$(dir ${file}))))
 
 # Do not treat %.dbd the same way because it creates a circular dependency
 # if a source dbd has the same name as the project dbd. Have to clear %.dbd and not use ../ path.
@@ -942,12 +949,9 @@ vpath menu%.dbd.pod ${DBD_PATH}
 # Allow any header extention the user comes up with (.h, .H, .hpp, .hxx, ...)
 $(foreach ext, $(sort $(suffix ${HDRS})), $(eval vpath %${ext} $(foreach path, os/${OS_CLASS} ${POSIX_{POSIX}} os/default, $(sort $(filter %/${path}/,$(dir ${HDRS})))) $(sort $(dir ${HDRS} $(filter-out /%,${SRCS})))))
 
-# Make sure all SHRLIBS are linked, even if the linker finds no dependency
-LDFLAGS_Linux += -Wl,--no-as-needed -Wl,-rpath,$(INSTALL_LIB)
-ifneq ($(words $(SHRLIBS)),0)
-LDFLAGS_Linux += $(addprefix -L ,$(dir ${SHRLIBS}))
-USR_LIBS += $(foreach l,$(notdir ${SHRLIBS}),$(if $(filter $(patsubst .%,%,$(SHRLIB_SUFFIX_BASE)),$(word 2,$(subst ., ,$l))),$(patsubst $(SHRLIB_PREFIX)%,%,$(firstword $(subst ., ,$l)))))
-endif
+# Make sure all SHRLIBS are found and linked, even if the linker finds no dependency
+LDFLAGS_Linux += $(addprefix -L ,$(dir ${SHRLIBS_})) -Wl,--no-as-needed
+USR_LIBS += $(foreach l,$(notdir ${SHRLIBS_}),$(if $(filter $(patsubst .%,%,$(SHRLIB_SUFFIX_BASE)),$(word 2,$(subst ., ,$l))),$(patsubst $(SHRLIB_PREFIX)%,%,$(firstword $(subst ., ,$l)))))
 
 PRODUCTS = ${MODULELIB} ${MODULEDBD} ${DEPFILE}
 MODULEINFOS:
@@ -966,7 +970,7 @@ ${MODULEDBD}: ${DBDFILES}
 	${MAKEHOME}expandDBD.pl -$(basename ${EPICSVERSION}) ${DBDEXPANDPATH} $^ > $@
 
 # Install everything.
-INSTALL_LIBS = $(addprefix ${INSTALL_LIB}/,${MODULELIB} $(call SONAME,${SHRLIBS}))
+INSTALL_LIBS = $(addprefix ${INSTALL_LIB}/,${MODULELIB} $(call SONAME,${SHRLIBS_}))
 ifeq (${OS_CLASS},WIN32) # .lib for WIN32 is also required for linking
     ifneq (${MODULELIB},)
 	INSTALL_LIBS += $(addprefix ${INSTALL_LIB}/,${LIB_PREFIX}${PRJ}${LIB_SUFFIX})
