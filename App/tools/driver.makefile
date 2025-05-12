@@ -918,22 +918,24 @@ RELEASE_INCLUDES += -I${EPICS_BASE}/include/os/${OS_CLASS}
 # For EPICS 3.13:
 EPICS_INCLUDES += -I$(EPICS_BASE_INCLUDE) -I$(EPICS_BASE_INCLUDE)/os/$(OS_CLASS)
 
+define EXPAND_PATH
+    $(patsubst %,../%,$(filter-out ~/% /%,$1)) $(patsubst ~/%,$(HOME)/%,$(filter ~/% /%,$1))
+endef
+
 # Get the shared library name that the dynamic linker will look for
 ifeq ($(OS_CLASS),Linux)
 define SONAME
-	$(if $(strip $1),$(or $(shell readelf -d $1 2>/dev/null | awk '/\(SONAME\)/{print gensub(/.*\[(.*)\]/,"\\1","G")}')), $1)
+	$(foreach f,$1,$(or $(shell readelf -d $(call EXPAND_PATH,$f) 2>/dev/null | awk '/\(SONAME\)/{print gensub(/.*\[(.*)\]/,"\\1","G")}'),$(notdir $f)))
 endef
 else
 define SONAME
-	$1
+	$(notdir $1)
 endef
 endif
 
 # Find all sources and set vpath accordingly.
-$(foreach file, $(filter-out ~/% /%,${SRCS} ${TEMPLS} ${SCR} ${SHRLIBS_}), $(eval vpath $(notdir ${file}) ../$(dir ${file})))
-$(foreach file, $(filter-out ~/% /%,${SHRLIBS_}), $(eval vpath $(call SONAME,${file}) ../$(dir ${file})))
-$(foreach file, $(filter ~/% /%,${SRCS} ${TEMPLS} ${SCR}), $(eval vpath $(notdir ${file}) $(patsubst ~/%,$(HOME)/%,$(dir ${file}))))
-$(foreach file, $(filter ~/% /%,${SHRLIBS_}), $(eval vpath $(call SONAME,${file}) $(patsubst ~/%,$(HOME)/%,$(dir ${file}))))
+$(foreach file, ${SRCS} ${TEMPLS} ${SCR}, $(eval vpath $(notdir ${file}) $(call EXPAND_PATH,$(dir ${file}))))
+$(foreach file, ${SHRLIBS_}, $(eval vpath $(call SONAME,${file}) $(call EXPAND_PATH,$(dir ${file}))))
 
 # Do not treat %.dbd the same way because it creates a circular dependency
 # if a source dbd has the same name as the project dbd. Have to clear %.dbd and not use ../ path.
@@ -950,7 +952,7 @@ vpath menu%.dbd.pod ${DBD_PATH}
 $(foreach ext, $(sort $(suffix ${HDRS})), $(eval vpath %${ext} $(foreach path, os/${OS_CLASS} ${POSIX_{POSIX}} os/default, $(sort $(filter %/${path}/,$(dir ${HDRS})))) $(sort $(dir ${HDRS} $(filter-out /%,${SRCS})))))
 
 # Make sure all SHRLIBS are found and linked, even if the linker finds no dependency
-LDFLAGS_Linux += $(addprefix -L ,$(dir ${SHRLIBS_})) -Wl,--no-as-needed
+LDFLAGS_Linux += $(addprefix -L,$(sort $(call EXPAND_PATH,$(dir ${SHRLIBS_})))) -Wl,--no-as-needed
 USR_LIBS += $(foreach l,$(notdir ${SHRLIBS_}),$(if $(filter $(patsubst .%,%,$(SHRLIB_SUFFIX_BASE)),$(word 2,$(subst ., ,$l))),$(patsubst $(SHRLIB_PREFIX)%,%,$(firstword $(subst ., ,$l)))))
 
 PRODUCTS = ${MODULELIB} ${MODULEDBD} ${DEPFILE}
