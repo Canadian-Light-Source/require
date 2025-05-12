@@ -478,7 +478,7 @@ debug::
 install build::
 # Delete old build if INSTBASE has changed and module depends on other modules.
 	@+for ARCH in ${CROSS_COMPILER_TARGET_ARCHS}; do \
-	    findmnt -t noautofs -n -o SOURCE --target ${EPICS_MODULES} | cmp -s O.${EPICSVERSION}_$$ARCH/INSTBASE || \
+	    findmnt -t noautofs -n -o SOURCE --target ${EPICS_MODULES} | tail -n1 | cmp -s O.${EPICSVERSION}_$$ARCH/INSTBASE || \
 	    ( grep -qs "^[^#]" O.${EPICSVERSION}_$$ARCH/*.dep && \
 	     (echo "rebuilding $$ARCH"; $(RMDIR) O.${EPICSVERSION}_$$ARCH) ) || true; \
 	done
@@ -960,7 +960,7 @@ MODULEINFOS:
 #	Rewrite version file and thus rebuild library if version changed:
 	@grep -xqs ${LIBVERSION} LIBVERSION || $(RM) $(wildcard *_version_*.*)
 	@echo ${PRJ} > MODULENAME
-	@echo $(shell findmnt -t noautofs -n -o SOURCE --target ${EPICS_MODULES}) > INSTBASE
+	@echo $(shell findmnt -t noautofs -n -o SOURCE --target ${EPICS_MODULES} | tail -n1) > INSTBASE
 	@echo ${PRODUCTS} > PRODUCTS
 	@echo ${LIBVERSION} > LIBVERSION
 
