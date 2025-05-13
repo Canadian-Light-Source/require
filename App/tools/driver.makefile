@@ -952,8 +952,15 @@ vpath menu%.dbd.pod ${DBD_PATH}
 $(foreach ext, $(sort $(suffix ${HDRS})), $(eval vpath %${ext} $(foreach path, os/${OS_CLASS} ${POSIX_{POSIX}} os/default, $(sort $(filter %/${path}/,$(dir ${HDRS})))) $(sort $(dir ${HDRS} $(filter-out /%,${SRCS})))))
 
 # Make sure all SHRLIBS are found and linked, even if the linker finds no dependency
-LDFLAGS_Linux += $(addprefix -L,$(sort $(call EXPAND_PATH,$(dir ${SHRLIBS_})))) -Wl,--no-as-needed
-USR_LIBS += $(foreach l,$(notdir ${SHRLIBS_}),$(if $(filter $(patsubst .%,%,$(SHRLIB_SUFFIX_BASE)),$(word 2,$(subst ., ,$l))),$(patsubst $(SHRLIB_PREFIX)%,%,$(firstword $(subst ., ,$l)))))
+LDFLAGS_Linux += -Wl,--no-as-needed
+ifeq ($(OS_CLASS),WIN32)
+# Need to find the .lib for each .dll, which is not necessarily in the same dir but often close
+SHRLIB_LDLIBS += $(foreach l,$(patsubst %.dll,%.lib,$(call EXPAND_PATH,$(filter %.dll %.lib,${SHRLIBS_}))),$(abspath $(firstword $(wildcard $(dir $l)../*/$(notdir $l)))))
+else
+SHRLIB_SEARCH_DIRS += $(sort $(call EXPAND_PATH,$(dir ${SHRLIBS_})))
+# Some SHRLIBS have (SHRLIB_SUFFIX_BASE).<version> extension. Split off whole extension after the $(SHRLIB_PREFIX) (.so on Linux)
+LIB_LIBS += $(foreach l,$(notdir ${SHRLIBS_}),$(if $(filter $(patsubst .%,%,$(SHRLIB_SUFFIX_BASE)),$(word 2,$(subst ., ,$l))),$(patsubst $(SHRLIB_PREFIX)%,%,$(firstword $(subst ., ,$l)))))
+endif
 
 PRODUCTS = ${MODULELIB} ${MODULEDBD} ${DEPFILE}
 MODULEINFOS:
@@ -972,12 +979,13 @@ ${MODULEDBD}: ${DBDFILES}
 	${MAKEHOME}expandDBD.pl -$(basename ${EPICSVERSION}) ${DBDEXPANDPATH} $^ > $@
 
 # Install everything.
-INSTALL_LIBS = $(addprefix ${INSTALL_LIB}/,${MODULELIB} $(call SONAME,${SHRLIBS_}))
-ifeq (${OS_CLASS},WIN32) # .lib for WIN32 is also required for linking
-    ifneq (${MODULELIB},)
+INSTALL_LIBS = $(addprefix ${INSTALL_LIB}/,${MODULELIB} $(filter-out %.lib,$(call SONAME,${SHRLIBS_})))
+ifeq (${OS_CLASS},WIN32) # WIN32 needs .lib for linking if this is a dependency and thus has headers
+    ifneq ($(words ${HDRS}),0)
 	INSTALL_LIBS += $(addprefix ${INSTALL_LIB}/,${LIB_PREFIX}${PRJ}${LIB_SUFFIX})
     endif
 endif
+
 # Problem: sometimes arch dependent deps are (manually) required even if no code exists
 #INSTALL_DEPS = ${DEPFILE:%=$(if ${MODULELIB},${INSTALL_LIB},${INSTALL_REV})/%}
 INSTALL_DEPS = ${DEPFILE:%=${INSTALL_LIB}/%}
