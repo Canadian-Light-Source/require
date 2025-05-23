@@ -965,7 +965,7 @@ endif
 PRODUCTS = ${MODULELIB} ${MODULEDBD} ${DEPFILE}
 MODULEINFOS:
 #	Rewrite version file and thus rebuild library if version changed:
-	@grep -xqs ${LIBVERSION} LIBVERSION || $(RM) $(wildcard *_version_*.*)
+	@grep -xqs ${LIBVERSION} LIBVERSION || $(RM) $(filter-out $(addsuffix .%,$(basename $(VERSIONFILE))), $(wildcard *_version_*.*))
 	@echo ${PRJ} > MODULENAME
 	@echo $(shell findmnt -t noautofs -n -o SOURCE --target ${EPICS_MODULES} | tail -n1) > INSTBASE
 	@echo ${PRODUCTS} > PRODUCTS
