@@ -281,10 +281,6 @@ do
     then # new module pool model
         REQUIRE_LIB=$(ls -1rv $EPICS_MODULES/$REQUIRE/${REQUIRE_VERSION:-*.*.*}/R$B/lib/$EPICS_HOST_ARCH/$LIBPREFIX$REQUIRE$LIBPOSTFIX 2>/dev/null | head -n 1)
         REQUIRE_DBD=${REQUIRE_LIB%/lib/*}/dbd/$REQUIRE.dbd
-    else # old driver pool model
-        REQUIRE=misc${REQUIRE_VERSION:+-}$REQUIRE_VERSION
-        REQUIRE_LIB=$INSTBASE/iocBoot/R$B/$EPICS_HOST_ARCH/$LIBPREFIX$REQUIRE$LIBPOSTFIX
-        REQUIRE_DBD=$INSTBASE/iocBoot/R$B/dbd/$REQUIRE.dbd
     fi
     if [ -n "$REQUIRE_LIB" ]
     then
@@ -303,18 +299,7 @@ export EPICS_HOST_ARCH
 
 # setup search path for require
 ODIR=O.${BASE}_$EPICS_HOST_ARCH
-EPICS_DRIVER_PATH=.:bin/$EPICS_HOST_ARCH:bin:snl:../snl:$ODIR:src/$ODIR:snl/$ODIR:../snl/$ODIR:${EPICS_DRIVER_PATH#:}
-
-#Special PSI: find installation base for libs from working directory
-D=$(rp $PWD)
-I=${D%/iocBoot/*}
-if [ "$I" != "$D" ]
-then
-    INSTBASE=$I
-fi
-
-EPICS_DRIVER_PATH=${EPICS_DRIVER_PATH%:}:${EPICS_MODULES}:${INSTBASE:=/work}/iocBoot/R$BASE/$EPICS_HOST_ARCH
-export INSTBASE
+EPICS_DRIVER_PATH=.:bin/$EPICS_HOST_ARCH:bin:snl:../snl:$ODIR:src/$ODIR:snl/$ODIR:../snl/$ODIR:${EPICS_DRIVER_PATH#:}:${EPICS_MODULES}
 
 # convert for win32-x86 arch
 if [ "${EPICS_HOST_ARCH#win32-}" != "$EPICS_HOST_ARCH" ]
@@ -329,7 +314,7 @@ fi
 export EPICS_DRIVER_PATH
 
 # setup search PATH (Windows needs it for libraries, but also find helper programs like msi)
-PATH=$PATH:$INSTBASE/iocBoot/R$BASE/$EPICS_HOST_ARCH:$EPICS_BASE/bin/$EPICS_HOST_ARCH:$EPICS_BASE/../seq/bin/$EPICS_HOST_ARCH
+PATH=$PATH:$EPICS_BASE/bin/$EPICS_HOST_ARCH:$EPICS_BASE/../seq/bin/$EPICS_HOST_ARCH
 
 export EPICS_IOCSH_HISTFILE=
 
