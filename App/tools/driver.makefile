@@ -982,10 +982,8 @@ ${MODULEDBD}: ${DBDFILES}
 
 # Install everything.
 INSTALL_LIBS = $(addprefix ${INSTALL_LIB}/,${MODULELIB} $(filter-out %.lib,$(call SONAME,${SHRLIBS_})))
-ifeq (${OS_CLASS},WIN32) # WIN32 needs .lib for linking if this is a dependency and thus has headers
-    ifneq ($(words ${HDRS}),0)
-	INSTALL_LIBS += $(addprefix ${INSTALL_LIB}/,${LIB_PREFIX}${PRJ}${LIB_SUFFIX})
-    endif
+ifeq (${OS_CLASS},WIN32) # WIN32 needs .lib for linking
+    INSTALL_LIBS += $(addprefix ${INSTALL_LIB}/,${LIB_PREFIX}${PRJ}${LIB_SUFFIX})
 endif
 
 # Problem: sometimes arch dependent deps are (manually) required even if no code exists
