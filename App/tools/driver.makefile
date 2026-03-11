@@ -102,6 +102,9 @@ DEPFILE = ${PRJ}.dep
 BASH_ENV=
 ENV=
 
+# Workaround for perl warnings about unknown locales
+export LC_ALL=C
+
 ifeq (${EPICS_HOST_ARCH},)
 $(error EPICS_HOST_ARCH is not set)
 endif
@@ -145,7 +148,7 @@ ifndef EPICSVERSION
 
 # Find out which EPICS versions to build.
 INSTALLED_EPICS_VERSIONS := $(sort $(patsubst ${EPICS_LOCATION}/base-%,%,$(realpath $(wildcard ${EPICS_LOCATION}/base-*[0-9]))))
-EPICS_VERSIONS = $(filter-out ${EXCLUDE_VERSIONS:=%},${DEFAULT_EPICS_VERSIONS})
+EPICS_VERSIONS = $(filter-out ${EXCLUDE_VERSIONS} ${EXCLUDE_VERSIONS:=.%},${DEFAULT_EPICS_VERSIONS})
 MISSING_EPICS_VERSIONS = $(filter-out ${BUILD_EPICS_VERSIONS},${EPICS_VERSIONS})
 BUILD_EPICS_VERSIONS = $(filter ${INSTALLED_EPICS_VERSIONS},${EPICS_VERSIONS})
 $(foreach v,$(sort $(basename $(basename $(basename ${BUILD_EPICS_VERSIONS}))) $(basename $(basename ${BUILD_EPICS_VERSIONS})) $(basename ${BUILD_EPICS_VERSIONS})),$(eval EPICS_VERSIONS_$v=$(filter $v.%,${BUILD_EPICS_VERSIONS})))
@@ -224,6 +227,7 @@ help:
 	@echo "  SOURCES          (*.c *.cc *.cpp *.st *.stt *.gt)"
 	@echo "  DBDS             (*.dbd)"
 	@echo "  HEADERS          () [only those to install]"
+	@echo "  GEN_HEADERS      () extra (to menus and records) generated headers"
 	@echo "  TEMPLATES        (*.template *.db *.subs) [db files]"
 	@echo "  SCRIPTS          (*.cmd *.iocsh) [startup and other scripts]"
 	@echo "  BINS             () [programs to install]"
@@ -363,6 +367,7 @@ ${CONFIG}/CONFIG:
 EB:=${EPICS_BASE}
 TOP:=${EPICS_BASE}
 DELAY_INSTALL_LIBS = YES
+override CONVERTRELEASE=true
 -include ${CONFIG}/CONFIG
 SHELL = /bin/bash -O extglob
 BASE_CPPFLAGS=
@@ -399,17 +404,18 @@ export DBD_SRCS
 
 #record dbd files given in DBDS
 RECORDS = $(filter %Record, $(basename $(notdir $(SRCS))))
-export RECORDS
 
 MENUS = $(basename $(filter menu%.dbd, $(notdir $(DBDS))))
 MENUS += $(basename $(basename $(filter menu%.dbd.pod, $(notdir $(DBDS)))))
 MENUS += $(basename $(notdir $(wildcard $(foreach m,$(if $(filter-out -none-,${DBDS}), $(shell awk '/^\s*include.*\<menu.*\.dbd\>/ {print gensub(/.*(menu.*\.dbd).*/,"\\1","g")}' $(filter-out -none-,${DBDS}))),$(addsuffix $m,$(sort $(dir $(DBDS))))))))
-export MENUS
+
+GEN_HDRS = ${GEN_HEADERS} ${MENUS} ${RECORDS}
+export GEN_HDRS
 
 BPTS = $(patsubst %.data,%.dbd,$(wildcard bpt*.data))
 export BPTS
 
-HDRS = ${RECORDS:%=${COMMON_DIR}/%.h} ${MENUS:%=${COMMON_DIR}/%.h}
+HDRS = ${GEN_HDRS:%=${COMMON_DIR}/%.h}
 HDRSX = ${HEADERS}
 HDRSX += ${HEADERS_${EPICS_BASETYPE}}
 HDRSX += ${HEADERS_${EPICSVERSION}}
@@ -472,7 +478,7 @@ debug::
 install build::
 # Delete old build if INSTBASE has changed and module depends on other modules.
 	@+for ARCH in ${CROSS_COMPILER_TARGET_ARCHS}; do \
-	    findmnt -t noautofs -n -o SOURCE --target ${EPICS_MODULES} | cmp -s O.${EPICSVERSION}_$$ARCH/INSTBASE || \
+	    findmnt -t noautofs -n -o SOURCE --target ${EPICS_MODULES} | tail -n1 | cmp -s O.${EPICSVERSION}_$$ARCH/INSTBASE || \
 	    ( grep -qs "^[^#]" O.${EPICSVERSION}_$$ARCH/*.dep && \
 	     (echo "rebuilding $$ARCH"; $(RMDIR) O.${EPICSVERSION}_$$ARCH) ) || true; \
 	done
@@ -514,12 +520,19 @@ what::
 	@echo ${EPICSVERSION} ${T_A}
 
 ifdef SYSROOT
-export PKG_CONFIG_LIBDIR=$(wildcard $(SYSROOT:%=%/lib*/pkgconfig))
+PKG_CONFIG_DIRS+=/lib*
+PKG_CONFIG_DIRS+=/usr/lib*
+PKG_CONFIG_DIRS+=/usr/lib/*
+PKG_CONFIG_DIRS+=/usr/share
+PKG_CONFIG_DIRS+=/opt/extra/lib/*
+export PKG_CONFIG_LIBDIR=$(subst $() $(),:,$(wildcard $(patsubst %, $(SYSROOT)%/pkgconfig, $(PKG_CONFIG_DIRS))))
 export PKG_CONFIG_SYSROOT_DIR = $(SYSROOT)
 endif
 
 # Add sources for specific epics types (3.13 or 3.14) or architectures.
 ARCH_PARTS = ${T_A} $(subst -, ,${T_A}) ${OS_CLASS}
+export ARCH_PARTS
+
 VAR_EXTENSIONS = $(firstword $(subst ., ,${EPICSVERSION})) ${EPICS_BASETYPE} ${EPICSVERSION} ${ARCH_PARTS} ${ARCH_PARTS:%=${EPICS_BASETYPE}_%} ${ARCH_PARTS:%=${EPICSVERSION}_%}
 export VAR_EXTENSIONS
 
@@ -536,8 +549,8 @@ export USR_LIBOBJS
 BINS += $(foreach x, ${VAR_EXTENSIONS}, ${BINS_$x})
 export BINS
 
-SHRLIBS += $(foreach x, ${VAR_EXTENSIONS}, ${SHRLIBS_$x})
-export SHRLIBS
+SHRLIBS_ = ${SHRLIBS} $(foreach x, ${VAR_EXTENSIONS}, ${SHRLIBS_$x})
+export SHRLIBS_
 
 export CFG
 
@@ -856,8 +869,7 @@ debug::
 	@echo "SHRLIBNAME = ${SHRLIBNAME}"
 	@echo "LOADABLE_SHRLIBNAME = ${LOADABLE_SHRLIBNAME}"
 	@echo "LIBTARGETS = ${LIBTARGETS}"
-	@echo "RECORDS = ${RECORDS}"
-	@echo "MENUS = ${MENUS}"
+	@echo "GEN_HDRS = ${GEN_HDRS}"
 	@echo "BPTS = ${BPTS}"
 	@echo "HDRS = ${HDRS}"
 	@$(foreach s,$(filter SOURCES%,${.VARIABLES}),echo "$s = $($s)";)
@@ -866,19 +878,19 @@ debug::
 	@$(foreach s,$(filter DBDS%,${.VARIABLES}),echo "$s = $($s)";)
 	@echo "DBD_SRCS = ${DBD_SRCS}"
 	@echo "DBDFILES = ${DBDFILES}"
+	@$(foreach s,$(filter SHRLIBS%,${.VARIABLES}),echo "$s = $($s)";)
 	@echo "TEMPLS = ${TEMPLS}"
 	@echo "MODULE_LOCATION = ${MODULE_LOCATION}"
 
 # In 3.14.8- this is required to build %Record.h and menu%.h files
-${BUILDRULE} ${RECORDS:%=${COMMON_DIR}/%.h}
-${BUILDRULE} ${MENUS:%=${COMMON_DIR}/%.h}
+${BUILDRULE} ${GEN_HDRS:%=${COMMON_DIR}/%.h}
 ${BUILDRULE} MODULEINFOS
 ${BUILDRULE} ${MODULEDBD}
 ${BUILDRULE} ${DEPFILE}
 ${BUILDRULE} AUTO_MODULES
 
 # In 3.15+ this is required to build %Record.h and menu%.h files
-COMMON_INC = ${RECORDS:%=${COMMON_DIR}/%.h} ${MENUS:%=${COMMON_DIR}/%.h}
+COMMON_INC = ${GEN_HDRS:%=${COMMON_DIR}/%.h}
 
 # Include default EPICS Makefiles (version dependent).
 # Avoid library installation when doing 'make build'.
@@ -889,10 +901,8 @@ INSTALL_LIBS=
 INSTALL_MUNCHS=
 include ${BASERULES}
 
-# In 7.0+ include submodules config files
-ifdef BASE_7_0
-include ${EPICS_BASE}/cfg/CONFIG_*_MODULE
-endif
+# Include submodules config files if available
+-include ${EPICS_BASE}/cfg/CONFIG_*_MODULE
 
 ifeq (${OS_CLASS},WIN32) # explicitly link required dependencies
 LIB_LIBS += ${EPICS_BASE_IOC_LIBS} ${REQ}
@@ -910,13 +920,24 @@ RELEASE_INCLUDES += -I${EPICS_BASE}/include/os/${OS_CLASS}
 # For EPICS 3.13:
 EPICS_INCLUDES += -I$(EPICS_BASE_INCLUDE) -I$(EPICS_BASE_INCLUDE)/os/$(OS_CLASS)
 
-# Find all sources and set vpath accordingly.
-$(foreach file, $(filter-out /%,${SRCS} ${TEMPLS} ${SCR} ${SHRLIBS}), $(eval vpath $(notdir ${file}) ../$(dir ${file})))
-$(foreach file, $(filter /%,${SRCS} ${TEMPLS} ${SCR} ${SHRLIBS}), $(eval vpath $(notdir ${file}) $(dir ${file})))
+define EXPAND_PATH
+    $(patsubst %,../%,$(filter-out ~/% /%,$1)) $(patsubst ~/%,$(HOME)/%,$(filter ~/% /%,$1))
+endef
 
-ifdef SHRLIBS
-LDFLAGS_Linux+=-Wl,-rpath,$(INSTALL_LIB)
+# Get the shared library name that the dynamic linker will look for
+ifeq ($(OS_CLASS),Linux)
+define SONAME
+	$(foreach f,$1,$(or $(shell readelf -d $(call EXPAND_PATH,$f) 2>/dev/null | awk '/\(SONAME\)/{print gensub(/.*\[(.*)\]/,"\\1","G")}'),$(notdir $f)))
+endef
+else
+define SONAME
+	$(notdir $1)
+endef
 endif
+
+# Find all sources and set vpath accordingly.
+$(foreach file, ${SRCS} ${TEMPLS} ${SCR}, $(eval vpath $(notdir ${file}) $(call EXPAND_PATH,$(dir ${file}))))
+$(foreach file, ${SHRLIBS_}, $(eval vpath $(call SONAME,${file}) $(call EXPAND_PATH,$(dir ${file}))))
 
 # Do not treat %.dbd the same way because it creates a circular dependency
 # if a source dbd has the same name as the project dbd. Have to clear %.dbd and not use ../ path.
@@ -932,10 +953,23 @@ vpath menu%.dbd.pod ${DBD_PATH}
 # Allow any header extention the user comes up with (.h, .H, .hpp, .hxx, ...)
 $(foreach ext, $(sort $(suffix ${HDRS})), $(eval vpath %${ext} $(foreach path, os/${OS_CLASS} ${POSIX_{POSIX}} os/default, $(sort $(filter %/${path}/,$(dir ${HDRS})))) $(sort $(dir ${HDRS} $(filter-out /%,${SRCS})))))
 
+# Make sure all SHRLIBS are found and linked, even if the linker finds no dependency
+LDFLAGS_Linux += -Wl,--no-as-needed
+ifeq ($(OS_CLASS),WIN32)
+# Need to find the .lib for each .dll, which is not necessarily in the same dir but often close
+SHRLIB_LDLIBS += $(foreach l,$(patsubst %.dll,%.lib,$(call EXPAND_PATH,$(filter %.dll %.lib,${SHRLIBS_}))),$(abspath $(firstword $(wildcard $(dir $l)../*/$(notdir $l)))))
+else
+SHRLIB_SEARCH_DIRS += $(sort $(call EXPAND_PATH,$(dir ${SHRLIBS_})))
+# Some SHRLIBS have (SHRLIB_SUFFIX_BASE).<version> extension. Split off whole extension after the $(SHRLIB_PREFIX) (.so on Linux)
+LIB_LIBS += $(foreach l,$(notdir ${SHRLIBS_}),$(if $(filter $(patsubst .%,%,$(SHRLIB_SUFFIX_BASE)),$(word 2,$(subst ., ,$l))),$(patsubst $(SHRLIB_PREFIX)%,%,$(firstword $(subst ., ,$l)))))
+endif
+
 PRODUCTS = ${MODULELIB} ${MODULEDBD} ${DEPFILE}
 MODULEINFOS:
+#	Rewrite version file and thus rebuild library if version changed:
+	@grep -xqs ${LIBVERSION} LIBVERSION || $(RM) $(filter-out $(addsuffix .%,$(basename $(VERSIONFILE))), $(wildcard *_version_*.*))
 	@echo ${PRJ} > MODULENAME
-	@echo $(shell findmnt -t noautofs -n -o SOURCE --target ${EPICS_MODULES}) > INSTBASE
+	@echo $(shell findmnt -t noautofs -n -o SOURCE --target ${EPICS_MODULES} | tail -n1) > INSTBASE
 	@echo ${PRODUCTS} > PRODUCTS
 	@echo ${LIBVERSION} > LIBVERSION
 
@@ -947,12 +981,11 @@ ${MODULEDBD}: ${DBDFILES}
 	${MAKEHOME}expandDBD.pl -$(basename ${EPICSVERSION}) ${DBDEXPANDPATH} $^ > $@
 
 # Install everything.
-INSTALL_LIBS = $(addprefix ${INSTALL_LIB}/,${MODULELIB} $(notdir ${SHRLIBS}))
-ifeq (${OS_CLASS},WIN32) # .lib for WIN32 is also required for linking
-    ifneq (${MODULELIB},)
-	INSTALL_LIBS += $(addprefix ${INSTALL_LIB}/,${LIB_PREFIX}${PRJ}${LIB_SUFFIX})
-    endif
+INSTALL_LIBS = $(addprefix ${INSTALL_LIB}/,${MODULELIB} $(filter-out %.lib,$(call SONAME,${SHRLIBS_})))
+ifeq (${OS_CLASS},WIN32) # WIN32 needs .lib for linking
+    INSTALL_LIBS += $(addprefix ${INSTALL_LIB}/,${LIB_PREFIX}${PRJ}${LIB_SUFFIX})
 endif
+
 # Problem: sometimes arch dependent deps are (manually) required even if no code exists
 #INSTALL_DEPS = ${DEPFILE:%=$(if ${MODULELIB},${INSTALL_LIB},${INSTALL_REV})/%}
 INSTALL_DEPS = ${DEPFILE:%=${INSTALL_LIB}/%}
@@ -1195,9 +1228,9 @@ endif
 # Create dependency file for recursive requires.
 ${DEPFILE}: ${LIBOBJS} $(USERMAKEFILE)
 	@echo "Collecting dependencies"
-	$(RM) $@
+	@$(RM) $@
 	@echo "# Generated file. Do not edit." > $@
-#	Check dependencies on ${REQ} and other module headers.
+#	Check dependencies on ${REQ} and other module headers:
 	$(foreach m,$(sort ${REQ} $(shell cat *.d 2>/dev/null | sed 's/ /\n/g' | sed -n 's%${EPICS_MODULES}/*\([^/]*\)/.*%\1%p' | sort -u)),echo "$m $(or $(if $(strip $(wildcard ${EPICS_MODULES}/$m/use_exact_version)$(shell echo ${$m_VERSION}|sed 'y/0123456789./           /')),$(strip ${$m_VERSION}),$(addsuffix .,$(word 1,$(subst ., ,${$m_VERSION})))$(word 2,$(subst ., ,${$m_VERSION}))),$(and $(wildcard ${EPICS_MODULES}/$m),$(error No numeric version found for REQUIRED module "$m". For using a test version try setting $m_VERSION in your $(notdir $(USERMAKEFILE)))),$(error REQUIRED module "$m" not found for ${T_A}))" >> $@;)
 ifeq (${EPICS_BASETYPE},3.13)
 ifneq ($(strip $(filter %.st %.stt,$(SRCS))),)
@@ -1207,7 +1240,7 @@ endif
 
 # Remove MakefileInclude after we are done because it interfers with our way to build.
 $(BUILDRULE)
-	$(RM) MakefileInclude
+	@$(RM) MakefileInclude
 
 endif # In O.* directory
 endif # T_A defined

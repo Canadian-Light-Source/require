@@ -356,7 +356,16 @@ x=0?,0?2:3,0?:5
 :exclamation: This type of arithmetic only works in local variable
 assignments and thus only in scripts executed by `runScript`.
 
+#### Command error handling
 
+If a command executd by `runScript` reports failure (not al actually do this
+when failing), the script is aborted. This can be avoided by starting the
+line with a `?` prefix. The `?` itself is not executed.
+
+**Example**:
+```
+?system("false")
+```
 
 ## Using driver.makefile
 

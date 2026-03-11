@@ -323,12 +323,12 @@ static HMODULE loadlib(const char* libname)
     }
 #elif defined (_WIN32)
     {
-        char *p;
-        char *libpath = strdup(libname);
-        if ((p = strrchr(libpath, '/')) != NULL)
-            *p = '\0';
-        SetDllDirectory(libpath);
-        if ((libhandle = LoadLibrary(libname)) == NULL)
+        char *libpath = realpath(libname, NULL);
+        if (libpath == NULL) {
+            fprintf (stderr, "Loading %s library failed: out of memory\n", libname);
+            return NULL;
+        }
+        if ((libhandle = LoadLibrary(libpath)) == NULL)
         {
             LPSTR lpMsgBuf;
 
@@ -345,7 +345,6 @@ static HMODULE loadlib(const char* libname)
             LocalFree(lpMsgBuf);
         }
         free(libpath);
-        SetDllDirectory(NULL);
     }
 #elif defined (vxWorks)
     {

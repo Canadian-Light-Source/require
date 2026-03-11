@@ -201,7 +201,8 @@ int runScript(const char* filename, const char* args)
     /* execute script line by line after expanding macros with arguments or environment */
     while (fgets(line_raw, line_raw_size, file))
     {
-        char* p, *x;
+        char* line_start, *x;
+        int fail_ok = 0;
 
         /* check if we have a line longer than the buffer size */
         while (line_raw[(len = (long)strlen(line_raw))-1] != '\n' && !feof(file))
@@ -238,46 +239,56 @@ int runScript(const char* filename, const char* args)
 
         macPopScope(mac);
 
-        p = line_exp;
-        while (isspace((unsigned char)*p)) p++;
-        if (p[0] != '#' || p[1] != '-')
+        line_start = line_exp;
+        while (isspace((unsigned char)*line_start)) line_start++;
+        if (line_start[0] != '#' || line_start[1] != '-')
             printf("%s\n", line_exp);
-        if (p[0] == 0 || p[0] == '#') continue;
+        if (line_start[0] == 0 || line_start[0] == '#') continue;
 
         /* find local variable assignments */
-        if ((x = strpbrk(p, "=(, \t\n\r")) != NULL && *x=='=')
+        if ((x = strpbrk(line_start, "=(, \t\n\r")) != NULL && *x=='=')
         {
             *x++ = 0;
             replaceExpressions(x, line_raw, line_raw_size);
             if (runScriptDebug)
-                printf("runScript: assign %s=%s\n", p, line_raw);
-            macPutValue(mac, p, line_raw);
+                printf("runScript: assign %s=%s\n", line_start, line_raw);
+            macPutValue(mac, line_start, line_raw);
             continue;
         }
+        if (*line_start == '?') {
+            fail_ok = 1;
+            line_start++;
+            while (isspace((unsigned char)*line_start)) line_start++;
+        }
 #ifdef _WRS_VXWORKS_MAJOR
-        if (strlen(line_exp) >= 255)
+        if (strlen(line_start) >= 255)
         {
-            fprintf(stderr, "runScript: Line too long (>=255):\n%s\n", line_exp);
+            fprintf(stderr, "runScript: Line too long (>=255):\n%s\n", line_start);
             return -1;
         }
         else
         {
             SHELL_EVAL_VALUE result;
-            status = shellInterpEvaluate(line_exp, "C", &result);
+            status = shellInterpEvaluate(line_start, "C", &result);
         }
 #elif defined(vxWorks)
-        if (strlen(line_exp) >= 120)
+        if (strlen(line_start) >= 120)
         {
-            fprintf(stderr, "runScript: Line too long (>=120):\n%s\n", line_exp);
+            fprintf(stderr, "runScript: Line too long (>=120):\n%s\n", line_start);
             return -1;
         }
-        status = execute(line_exp);
+        status = execute(line_start);
 #else
-        if (runScriptDebug)
-            printf("runScript: iocshCmd: '%s'\n", line_exp);
-        status = iocshCmd(line_exp);
+        status = iocshCmd(line_start);
 #endif
-        if (status != 0) break;
+        if (status != 0) {
+            if (fail_ok)
+                fprintf(stderr, "runScript: Error ignored\n");
+            else {
+                fprintf(stderr, "runScript: Error terminated script %s\n", filename);
+                break;
+            }
+        }
     }
     goto end;
 error:
