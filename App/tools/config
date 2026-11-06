@@ -1,0 +1,5 @@
+DEFAULT_EPICS_VERSIONS = 7.0.8 7.0.9 7.0.10
+EPICS_LOCATION = /opt/epics
+GIT_DOMAIN = lightsource.ca
+BUILDCLASSES = Linux
+EXCLUDE_ARCHS = clang
